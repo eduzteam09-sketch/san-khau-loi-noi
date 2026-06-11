@@ -151,9 +151,8 @@ export default function App() {
     audio.onerror = null;
     window.speechSynthesis.cancel();
 
-    // Lớp 1: Dùng client=tw-ob (Giọng Nữ chuẩn, mượt mà nhất, nhưng Vercel/Github có thể thỉnh thoảng chặn)
+    // Dùng client=tw-ob ưu tiên, dự phòng gtx (chỉ dùng cho nhân vật)
     const primaryUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=${encodeURIComponent(text)}`;
-    // Lớp 2: Dùng client=gtx (Cổng bypass cực mạnh, vượt mọi tường lửa CORS)
     const backupUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=vi&q=${encodeURIComponent(text)}`;
 
     let isUsingPrimary = true;
@@ -166,7 +165,6 @@ export default function App() {
     // Hệ thống Fallback (Dự phòng)
     audio.onerror = () => {
         if (isUsingPrimary) {
-            console.warn("Máy chủ từ chối cổng 1 (tw-ob). Đang tự động chuyển sang cổng 2 (gtx)...");
             isUsingPrimary = false;
             audio.src = backupUrl;
             
@@ -177,7 +175,6 @@ export default function App() {
                 });
             }
         } else {
-            console.warn("Mất kết nối mạng. Đang tự động chuyển sang Web Speech API ngoại tuyến...");
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'vi-VN';
             utterance.rate = 0.95;
@@ -190,9 +187,8 @@ export default function App() {
     const playPromise = audio.play();
     if (playPromise !== undefined) {
         playPromise.catch(error => {
-            // CHÌA KHÓA: Bỏ qua lỗi AbortError để không bị nhảy giọng
+            // Bỏ qua lỗi AbortError để không bị nhảy giọng
             if (error.name === 'AbortError') return; 
-            console.warn("Trình duyệt chặn Autoplay, kích hoạt dự phòng", error);
             audio.onerror();
         });
     }
@@ -220,14 +216,13 @@ export default function App() {
     setSpeakerData({ name: "Cô giáo AI", icon: "👩‍🏫", isAI: true });
     setCurrentCharacterText(scenario.context);
     setPhase('intro');
-    speakText(scenario.context);
+    // Đã gỡ bỏ lệnh đọc âm thanh của giáo viên
   };
 
   const toggleListen = () => {
     if (isListening) {
       recognitionRef.current.stop();
     } else {
-      // Khi bé bấm Micro -> Xóa bỏ toàn bộ âm thanh AI đang phát để tránh nhiễu
       if (currentAudioRef.current) {
           currentAudioRef.current.pause();
           currentAudioRef.current.onended = null;
@@ -256,7 +251,6 @@ export default function App() {
     const hasPolite = scenario.rules.polite.some(word => lowercaseText.includes(word));
     const wordCount = text.trim().split(/\s+/).length;
 
-    // Phân tích logic ưu tiên từ cao xuống thấp
     if (hasImpolite) {
         errorType = 'hasImpolite';
     } else if (!hasAction) {
@@ -269,28 +263,26 @@ export default function App() {
 
     setTimeout(() => {
       if (!errorType) {
-        // Trả lời đạt 100% (Polite + Meaningful + Correct Length)
+        // Trả lời đạt 100% -> Nhân vật đáp lại (Vẫn giữ âm thanh nhân vật)
         setSpeakerData({ name: scenario.aiCharacter, icon: scenario.image, isAI: true });
         setCurrentCharacterText(scenario.successReply);
         setScore(prev => prev + 10);
         
         speakText(scenario.successReply, true, () => {
-           // Gợi ý mở rộng câu trả lời đỉnh hơn nữa
+           // Sau khi nhân vật nói xong, hiện text đánh giá của giáo viên (Không đọc âm thanh)
            setTimeout(() => {
                setPhase('evaluation');
                setSpeakerData({ name: "Cô giáo AI", icon: "👩‍🏫", isAI: true });
                setCurrentCharacterText(scenario.evaluation);
-               speakText(scenario.evaluation, false);
            }, 600);
         });
         
         setPhase('success');
       } else {
-        // Trả lời thiếu / sai -> Mớm lời đúng lỗi của bé
+        // Trả lời thiếu / sai -> Mớm lời đúng lỗi của bé (Chỉ hiện text, không đọc)
         setSpeakerData({ name: "Cô giáo AI", icon: "👩‍🏫", isAI: true });
         const hintMsg = scenario.hints[errorType] || "Bé thử nói lại một lần nữa rõ ràng hơn nhé.";
         setCurrentCharacterText(hintMsg);
-        speakText(hintMsg);
         setPhase('hint');
       }
     }, 1000);
@@ -306,7 +298,7 @@ export default function App() {
       setSpeakerData({ name: "Cô giáo AI", icon: "👩‍🏫", isAI: true });
       const finishText = "Tuyệt vời quá! Bé đã hoàn thành xuất sắc các tình huống giao tiếp. Bé là một người bạn vô cùng lịch sự và đáng yêu!";
       setCurrentCharacterText(finishText);
-      speakText(finishText);
+      // Đã gỡ bỏ lệnh đọc âm thanh kết thúc
     }
   };
 
@@ -443,7 +435,7 @@ export default function App() {
                  {phase === 'evaluation' ? (
                    <>Qua tình huống tiếp theo <ArrowRight className="w-8 h-8" /></>
                  ) : (
-                   "Đang nghe cô giáo nhận xét..."
+                   "Đang đọc nhận xét..."
                  )}
                </button>
             ) : (
@@ -451,7 +443,7 @@ export default function App() {
                  <p className={`text-base font-semibold mb-3 transition-colors ${
                     isListening ? 'text-rose-500 animate-pulse' : 'text-gray-500'
                  }`}>
-                    {isListening ? "Nhấn vào micro để hoàn thành câu nói" : "Nhấn Micro để nói chuyện với bạn nhé!"}
+                    {isListening ? "Nhấn vào micro để hoàn thành câu nói" : "Đọc xong yêu cầu, bé nhấn Micro để trả lời nhé!"}
                  </p>
                  
                  <button 
